@@ -43,7 +43,7 @@ using namespace chip::Encoding;
 constexpr size_t kPacketSizeBytes = 2;
 
 // TODO: Actual limit may be lower (spec issue #2119)
-constexpr uint16_t kMaxMessageSize = static_cast<uint16_t>(System::PacketBuffer::kMaxSizeWithoutReserve - kPacketSizeBytes);
+constexpr uint32_t kMaxTCPMessageSize = static_cast<uint32_t>(CHIP_CONFIG_LARGE_PAYLOAD_MAX_SIZE - kPacketSizeBytes);
 
 constexpr int kListenBacklogSize = 2;
 
@@ -273,7 +273,7 @@ CHIP_ERROR TCPBase::ProcessReceivedBuffer(Inet::TCPEndPoint * endPoint, const Pe
             return err;
         }
         uint16_t messageSize = LittleEndian::Get16(messageSizeBuf);
-        if (messageSize >= kMaxMessageSize)
+        if (messageSize >= kMaxTCPMessageSize)
         {
             // This message is too long for upper layers.
             return CHIP_ERROR_MESSAGE_TOO_LONG;
