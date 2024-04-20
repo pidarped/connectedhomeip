@@ -470,7 +470,7 @@ void PacketBuffer::AddRef()
 #endif // !CHIP_SYSTEM_CONFIG_USE_LWIP
 }
 
-PacketBufferHandle PacketBufferHandle::New(size_t aAvailableSize, uint16_t aReservedSize)
+PacketBufferHandle PacketBufferHandle::New(size_t aAvailableSize, uint16_t aReservedSize, bool aIsLarge)
 {
     // Adding three 16-bit-int sized numbers together will never overflow
     // assuming int is at least 32 bits.
@@ -488,7 +488,14 @@ PacketBufferHandle PacketBufferHandle::New(size_t aAvailableSize, uint16_t aRese
 
     CHIP_SYSTEM_FAULT_INJECT(FaultInjection::kFault_PacketBufferNew, return PacketBufferHandle());
 
-    if (aAvailableSize > UINT16_MAX || lAllocSize > PacketBuffer::kMaxSizeWithoutReserve || lBlockSize > UINT16_MAX)
+#if INET_CONFIG_ENABLE_TCP_ENDPOINT
+    if (aIsLarge && lAllocSize > CHIP_CONFIG_LARGE_PAYLOAD_MAX_SIZE)
+    {
+        ChipLogError(chipSystemLayer, "PacketBuffer: allocation too large.");
+        return PacketBufferHandle();
+    }
+#endif // INET_CONFIG_ENABLE_TCP_ENDPOINT
+    if (!aIsLarge && (aAvailableSize > UINT16_MAX || lAllocSize > PacketBuffer::kMaxSizeWithoutReserve || lBlockSize > UINT16_MAX))
     {
         ChipLogError(chipSystemLayer, "PacketBuffer: allocation too large.");
         return PacketBufferHandle();
@@ -548,16 +555,17 @@ PacketBufferHandle PacketBufferHandle::New(size_t aAvailableSize, uint16_t aRese
 }
 
 PacketBufferHandle PacketBufferHandle::NewWithData(const void * aData, size_t aDataSize, uint16_t aAdditionalSize,
-                                                   uint16_t aReservedSize)
+                                                   uint16_t aReservedSize, bool aIsLarge)
 {
-    if (aDataSize > UINT16_MAX)
+    bool isOutOfSizeBounds = (aIsLarge ? aDataSize > UINT32_MAX : aDataSize > UINT16_MAX);
+    if (isOutOfSizeBounds)
     {
         ChipLogError(chipSystemLayer, "PacketBuffer: allocation too large.");
         return PacketBufferHandle();
     }
     // Since `aDataSize` fits in uint16_t, the sum `aDataSize + aAdditionalSize` will not overflow.
     // `New()` will only return a non-null buffer if the total allocation size does not overflow.
-    PacketBufferHandle buffer = New(aDataSize + aAdditionalSize, aReservedSize);
+    PacketBufferHandle buffer = New(aDataSize + aAdditionalSize, aReservedSize, aIsLarge);
     if (buffer.mBuffer != nullptr)
     {
         memcpy(buffer.mBuffer->payload, aData, aDataSize);
@@ -671,7 +679,7 @@ PacketBufferHandle PacketBufferHandle::PopHead()
     return PacketBufferHandle(head);
 }
 
-PacketBufferHandle PacketBufferHandle::CloneData() const
+PacketBufferHandle PacketBufferHandle::CloneData(bool aIsLarge) const
 {
     PacketBufferHandle cloneHead;
 
@@ -680,7 +688,17 @@ PacketBufferHandle PacketBufferHandle::CloneData() const
         uint16_t originalDataSize     = original->MaxDataLength();
         uint16_t originalReservedSize = original->ReservedSize();
 
-        if (originalDataSize + originalReservedSize > PacketBuffer::kMaxSizeWithoutReserve)
+#if INET_CONFIG_ENABLE_TCP_ENDPOINT
+        // If buffer is intended to be large, check against max size for large
+        // allocations.
+        if (aIsLarge && originalDataSize + originalReservedSize > CHIP_CONFIG_LARGE_PAYLOAD_MAX_SIZE)
+        {
+            return PacketBufferHandle();
+        }
+#endif // INET_CONFIG_ENABLE_TCP_ENDPOINT
+        // If buffer is not intended to be large, check against max size for
+        // packets meant to go over MRP.
+        if (!aIsLarge && originalDataSize + originalReservedSize > PacketBuffer::kMaxSizeWithoutReserve)
         {
             // The original memory allocation may have provided a larger block than requested (e.g. when using a shared pool),
             // and in particular may have provided a larger block than we are able to request from PackBufferHandle::New().
@@ -694,7 +712,7 @@ PacketBufferHandle PacketBufferHandle::CloneData() const
             originalDataSize = static_cast<uint16_t>(PacketBuffer::kMaxSizeWithoutReserve - originalReservedSize);
         }
 
-        PacketBufferHandle clone = PacketBufferHandle::New(originalDataSize, originalReservedSize);
+        PacketBufferHandle clone = PacketBufferHandle::New(originalDataSize, originalReservedSize, aIsLarge);
         if (clone.IsNull())
         {
             return PacketBufferHandle();

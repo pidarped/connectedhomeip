@@ -613,17 +613,19 @@ public:
      *
      *  On success, it is guaranteed that \c AvailableDataSize() is no less than \a aAvailableSize.
      *
+     *  @param[in]  aIsLarge        Explicitly indicates if the buffer allocation is meant to be large(exceeding kMaxSize)
      *  @param[in]  aAvailableSize  Minimum number of octets to for application data (at `Start()`).
      *  @param[in]  aReservedSize   Number of octets to reserve for protocol headers (before `Start()`).
      *
      *  @return     On success, a PacketBufferHandle to the allocated buffer. On fail, \c nullptr.
      */
-    static PacketBufferHandle New(size_t aAvailableSize, uint16_t aReservedSize = PacketBuffer::kDefaultHeaderReserve);
+    static PacketBufferHandle New(size_t aAvailableSize, uint16_t aReservedSize = PacketBuffer::kDefaultHeaderReserve, bool aIsLarge = false);
 
     /**
      * Allocates a packet buffer with initial contents.
      *
      *  @param[in]  aData           Initial buffer contents.
+     *  @param[in]  aIsLarge        Explicitly indicates if the buffer allocation is meant to be large(exceeding kMaxSize)
      *  @param[in]  aDataSize       Size of initial buffer contents.
      *  @param[in]  aAdditionalSize Size of additional application data space after the initial contents.
      *  @param[in]  aReservedSize   Number of octets to reserve for protocol headers.
@@ -631,14 +633,17 @@ public:
      *  @return     On success, a PacketBufferHandle to the allocated buffer. On fail, \c nullptr.
      */
     static PacketBufferHandle NewWithData(const void * aData, size_t aDataSize, uint16_t aAdditionalSize = 0,
-                                          uint16_t aReservedSize = PacketBuffer::kDefaultHeaderReserve);
+                                          uint16_t aReservedSize = PacketBuffer::kDefaultHeaderReserve, bool aIsLarge = false);
 
     /**
      * Creates a copy of a packet buffer (or chain).
      *
+     *  @param[in]  aIsLarge        Explicitly indicates if the buffer cloning is intended
+     *                              on a large buffer exceeding
+     *                              kMaxSize.
      * @returns empty handle on allocation failure. Otherwise, the returned buffer has the same sizes and contents as the original.
      */
-    PacketBufferHandle CloneData() const;
+    PacketBufferHandle CloneData(bool aIsLarge = false) const;
 
     /**
      * Perform an implementation-defined check on the validity of a PacketBufferHandle.
